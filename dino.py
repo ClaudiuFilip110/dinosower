@@ -1,7 +1,9 @@
 import pygame
 import os
 import random
+import math
 import sys
+import neat
 
 pygame.init()
 
@@ -36,6 +38,7 @@ class Dino:
         self.dino_jump = False
         self.jump_vel = self.JUMP_VEL
         self.rect = pygame.Rect(self.X_POS, self.Y_POS, img.get_width(), img.get_height())
+        self.color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         self.step_index = 0
 
     def update(self):
@@ -67,7 +70,9 @@ class Dino:
 
     def draw(self, SCREEN):
         SCREEN.blit(self.image, (self.rect.x, self.rect.y))
-
+        pygame.draw.rect(SCREEN, self.color, (self.rect.x, self.rect.y, self.rect.width, self.rect.height), 2)
+        for obstacle in obstacles:
+            pygame.draw.line(SCREEN, self.color, (self.rect.x + 54, self.rect.y + 12), obstacle.rect.center, 2)
 
 class Obstacle:
     def __init__(self, image, number_of_cacti):
@@ -98,12 +103,19 @@ class LargeCactus(Obstacle):
 
 def remove(index):
     dinos.pop(index)
+    ge.pop(index)
+    nets.pop(index)
+
+def distance(a, b):
+    x = a[0]-b[0]
+    y = a[1]-b[1]
+    return math.sqrt(x**2+y**2)
 
 def score():
         global points, game_speed
         points += 1
         if points % 100 == 0:
-            game_speed += 1 
+            game_speed += 2
         text = FONT.render(f'Points: {str(points)}', True, (0,0,0))
         SCREEN.blit(text, (950, 50))
 
@@ -116,8 +128,18 @@ def background():
         x_pos_bg = 0
     x_pos_bg -= game_speed
 
-def main():
-    global game_speed, x_pos_bg, y_pos_bg, points, dinos, obstacles
+def statistics():
+        global dinos, game_speed, ge
+        text_1 = FONT.render(f'Dinosaurs Alive:  {str(len(dinos))}', True, (0, 0, 0))
+        text_2 = FONT.render(f'Generation:  {pop.generation+1}', True, (0, 0, 0))
+        text_3 = FONT.render(f'Game Speed:  {str(game_speed)}', True, (0, 0, 0))
+
+        SCREEN.blit(text_1, (50, 450))
+        SCREEN.blit(text_2, (50, 480))
+        SCREEN.blit(text_3, (50, 510))
+
+def eval_genomes(genomes, config):
+    global game_speed, x_pos_bg, y_pos_bg, points, dinos, obstacles, ge, nets
     clock = pygame.time.Clock()
 
     points = 0
@@ -127,7 +149,18 @@ def main():
 
 
     obstacles = []
-    dinos = [Dino()]
+    dinos = []
+    ge = []     #dict with info about every dino
+    nets = [] 
+
+
+    for genome_id, genome in genomes:
+        dinos.append(Dino())
+        ge.append(genome)
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        nets.append(net)
+        genome.fitness = 0
+
 
     run = True
     while run:
@@ -150,7 +183,7 @@ def main():
             rand_int = random.randint(0, 1)
             if rand_int == 0:
                 obstacles.append(SmallCactus(SMALL_CACTUS, random.randint(0, 2)))
-            else:
+            elif rand_int == 1:
                 obstacles.append(LargeCactus(LARGE_CACTUS, random.randint(0, 2)))
 
         for obstacle in obstacles:
@@ -158,19 +191,40 @@ def main():
             obstacle.update()
             for i, dino in enumerate(dinos):
                 if dino.rect.colliderect(obstacle.rect):
+                    ge[i].fitness -= 1
                     remove(i)
 
 
-        user_input = pygame.key.get_pressed()
+
+
 
         for i, dino in enumerate(dinos):
-            if user_input[pygame.K_SPACE] or user_input[pygame.K_UP]:
+            output = nets[i].activate((dino.rect.y, distance((dino.rect.x,dino.rect.y),
+                                                            obstacle.rect.midtop)))
+            if output[0] > 0.5 and dino.rect.y == dino.rect.y == dino.Y_POS:
                 dino.dino_jump = True
                 dino.dino_run = False
 
         score()
         background()
+        statistics()
         clock.tick(30)
         pygame.display.update()
 
-main()
+def run(config_path):
+    global pop
+    config = neat.config.Config(
+        neat.DefaultGenome,
+        neat.DefaultReproduction,
+        neat.DefaultSpeciesSet,
+        neat.DefaultStagnation,
+        config_path
+    )
+
+    pop = neat.Population(config)
+    pop.run(eval_genomes, 50)
+
+if __name__ == '__main__':
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, 'config.txt')
+    run(config_path)
