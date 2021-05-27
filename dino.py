@@ -69,9 +69,64 @@ class Dino:
         SCREEN.blit(self.image, (self.rect.x, self.rect.y))
 
 
+class Obstacle:
+    def __init__(self, image, number_of_cacti):
+        self.image = image
+        self.type = number_of_cacti
+        self.rect = self.image[self.type].get_rect()
+        self.rect.x = SCREEN_WIDTH
+
+    def update(self):
+        self.rect.x -= game_speed
+        if self.rect.x < -self.rect.width:
+            obstacles.pop()
+
+    def draw(self, SCREEN):
+        SCREEN.blit(self.image[self.type], self.rect)
+
+
+class SmallCactus(Obstacle):
+    def __init__(self, image, number_of_cacti):
+        super().__init__(image, number_of_cacti)
+        self.rect.y = 325
+
+        
+class LargeCactus(Obstacle):
+    def __init__(self, image, number_of_cacti):
+        super().__init__(image, number_of_cacti)
+        self.rect.y = 300
+
+def remove(index):
+    dinos.pop(index)
+
+def score():
+        global points, game_speed
+        points += 1
+        if points % 100 == 0:
+            game_speed += 1 
+        text = FONT.render(f'Points: {str(points)}', True, (0,0,0))
+        SCREEN.blit(text, (950, 50))
+
+def background():
+    global x_pos_bg, y_pos_bg
+    image_width = BG.get_width()
+    SCREEN.blit(BG, (x_pos_bg, y_pos_bg))
+    SCREEN.blit(BG, (image_width + x_pos_bg, y_pos_bg))
+    if x_pos_bg <= -image_width:
+        x_pos_bg = 0
+    x_pos_bg -= game_speed
+
 def main():
+    global game_speed, x_pos_bg, y_pos_bg, points, dinos, obstacles
     clock = pygame.time.Clock()
 
+    points = 0
+    x_pos_bg = 0
+    y_pos_bg = 380
+    game_speed = 20
+
+
+    obstacles = []
     dinos = [Dino()]
 
     run = True
@@ -87,13 +142,34 @@ def main():
             dino.update()
             dino.draw(SCREEN)
 
+
+        if len(dinos) == 0:
+            break
+
+        if len(obstacles) == 0:
+            rand_int = random.randint(0, 1)
+            if rand_int == 0:
+                obstacles.append(SmallCactus(SMALL_CACTUS, random.randint(0, 2)))
+            else:
+                obstacles.append(LargeCactus(LARGE_CACTUS, random.randint(0, 2)))
+
+        for obstacle in obstacles:
+            obstacle.draw(SCREEN)
+            obstacle.update()
+            for i, dino in enumerate(dinos):
+                if dino.rect.colliderect(obstacle.rect):
+                    remove(i)
+
+
         user_input = pygame.key.get_pressed()
 
         for i, dino in enumerate(dinos):
-            if user_input[pygame.K_SPACE]:
+            if user_input[pygame.K_SPACE] or user_input[pygame.K_UP]:
                 dino.dino_jump = True
                 dino.dino_run = False
 
+        score()
+        background()
         clock.tick(30)
         pygame.display.update()
 
